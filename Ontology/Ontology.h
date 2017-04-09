@@ -129,59 +129,95 @@ namespace std {
 
 class Ontology {
 private:
-	std::list<Node*> categoryList;
+	std::list<Node*> rootsList;
 
 public:
-	Ontology(std::list<Node*> categoryList) : categoryList(categoryList) {}
+	Ontology(std::list<Node*> rootsList) : rootsList(rootsList) {}
 
+	//This constructor builds an Ontology using a list of edges (vertex pairs of a graph)
 	Ontology(std::list<tEdge> edges) {
-		if (!categoryList.empty()){
+		if (!edges.empty()){
 			std::unordered_set<tEdge> checkedPairs; //unoreder_set (HashSet) with the edges that have been already inserted in the new Ontology.
 			std::unordered_map<std::string, Node*> nodePointersHashSet; //unordered_map (HashMap) with pointers to every Node of the new Ontology.
-			std::unordered_map<std::string, bool> singleNodesList; //unordered_map (HashMap) with pointers to every Node of the new Ontology.
+			std::unordered_set<std::string> possibleRootNodes; //unordered_set (HashSet) with the possible root nodes while processing the edges
 
 
 			for (std::list<tEdge>::iterator list_iter = edges.begin(); list_iter != edges.end(); list_iter++) {
-				if (checkedPairs.find(*list_iter) != checkedPairs.end()){
-					//Node* parent = new Node(list_iter->parent);
-
+				if (checkedPairs.find(*list_iter) == checkedPairs.end()){
 					if (list_iter->isPair) { //if it is a complete edge (two nodes)
-						//Node* son = new Node(list_iter->son);
 
 						std::unordered_map<std::string, Node*>::iterator parent_iter = nodePointersHashSet.find(list_iter->parent);
 						std::unordered_map<std::string, Node*>::iterator son_iter = nodePointersHashSet.find(list_iter->son);
 						std::unordered_map<std::string, Node*>::iterator end_iter = nodePointersHashSet.end();
 
-						if (parent_iter != end_iter && son_iter != end_iter) {
-							//se crean dos nuevos objetos de tipo Node y se aniade uno de ellos como hijo al otro
+						if (parent_iter != end_iter && son_iter != end_iter) { //Los nodos estan en la ontologia pero no estan conectados
+							//se le aniade como hijo el Node apuntado por son_iter al Node apuntado por parent_iter
+							((Node*)(*parent_iter).second)->addSon(((Node*)(*son_iter).second));
+
+							if (possibleRootNodes.find(list_iter->son) != possibleRootNodes.end())
+								possibleRootNodes.erase(list_iter->son);
 						}
 						else if (parent_iter == end_iter && son_iter != end_iter) {
+							
 							//se crea un Node padre y se le aniade como hijo el Node al que apunta son_iter
+							Node* newParent = new Node(list_iter->parent);
+							newParent->addSon(((Node*)(*son_iter).second));
+
+							nodePointersHashSet.insert({ list_iter->parent, newParent });
+
+							//comprobar si el hijo estaba en la estructura de posibles nodos raices y quitarlo de ella y meter al padre si o si
+							possibleRootNodes.insert(list_iter->parent);
+
+							if (possibleRootNodes.find(list_iter->son) != possibleRootNodes.end())
+								possibleRootNodes.erase(list_iter->son);
+
+							
 						}
 						else if (parent_iter != end_iter && son_iter == end_iter) {
 							//se crea un Node hijo y se le hace hijo del Node apuntado por parent_iter
-						}
-						else { //Los nodos estan en la ontologia pero no estan conectados
-							//se le aniade como hijo el Node apuntado por son_iter al Node apuntado por parent_iter
+							Node* newSon = new Node(list_iter->son);
+							((Node*)(*parent_iter).second)->addSon(newSon);
 
+							nodePointersHashSet.insert({ list_iter->son, newSon });
+						}
+						else { //Los nodos no estan en la ontologia
+							//se crean dos nuevos objetos de tipo Node y se aniade uno de ellos como hijo al otro
+							Node* newParent = new Node(list_iter->parent);
+							Node* newSon = new Node(list_iter->son);
+							newParent->addSon(newSon);
+
+							nodePointersHashSet.insert({ list_iter->parent, newParent });
+							nodePointersHashSet.insert({ list_iter->son, newSon });
+
+							//poner al padre en una estructura temporal de posibles nodos raiz
+							possibleRootNodes.insert(list_iter->parent);
 						}
 					}
 					else { //if it is a single node
 						if (nodePointersHashSet.find(list_iter->parent) == nodePointersHashSet.end()) {
-							//PONERLO EN LA LISTA DE HIJOS PRINCIPAL PERO A LA ESPERA POR SI APARECE ALGUN PADRE SUYO
+							Node* newRoot = new Node(list_iter->parent);
+							nodePointersHashSet.insert({ list_iter->parent, newRoot });
+
+							//poner al nuevo nodo en una estructura temporal de posibles nodos raiz
+							possibleRootNodes.insert(list_iter->parent);
 						}
-							
 					}
+
 					checkedPairs.insert(*list_iter);
 				}
 			}
+
+			//aniadir a la lista de nodos raiz de la ontologia los nodos de la estructura temporal de posibles nodos raiz.
+			//Los que quedan en ella si son verdaderas raices. Cojo los strings del set y busco los nodos del hashset y los aniado a la lista de raices de la ontologia
+			for (std::string root : possibleRootNodes)
+				rootsList.push_back((Node*)(*nodePointersHashSet.find(root)).second);
 
 		}
 	}
 
 	~Ontology() {
-		if (!categoryList.empty()) {
-			for (std::list<Node*>::iterator list_iter = categoryList.begin(); list_iter != categoryList.end(); list_iter++) {
+		if (!rootsList.empty()) {
+			for (std::list<Node*>::iterator list_iter = rootsList.begin(); list_iter != rootsList.end(); list_iter++) {
 				delete ((Node*)(*list_iter));
 			}
 		}
@@ -190,16 +226,16 @@ public:
 	}
 
 	void print() {
-		if (!categoryList.empty()){
-			for (std::list<Node*>::iterator list_iter = categoryList.begin(); list_iter != categoryList.end(); list_iter++) {
+		if (!rootsList.empty()){
+			for (std::list<Node*>::iterator list_iter = rootsList.begin(); list_iter != rootsList.end(); list_iter++) {
 				((Node*)(*list_iter))->print(0);
 			}
 		}
 	}
 
 	void descompose(std::list<tEdge> &edges){
-		if (!categoryList.empty()){
-			for (std::list<Node*>::iterator list_iter = categoryList.begin(); list_iter != categoryList.end(); list_iter++) {
+		if (!rootsList.empty()){
+			for (std::list<Node*>::iterator list_iter = rootsList.begin(); list_iter != rootsList.end(); list_iter++) {
 				((Node*)(*list_iter))->descompose(edges);
 			}
 		}
