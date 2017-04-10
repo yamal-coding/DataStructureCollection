@@ -6,6 +6,7 @@
 #include <iostream>
 #include <unordered_set>
 #include <unordered_map>
+#include <exception>
 
 typedef struct {
 	bool isPair;
@@ -17,11 +18,24 @@ bool operator==(const tEdge &a, const tEdge &b) {
 	return a.parent == b.parent && a.son == b.son && a.isPair == b.isPair;
 }
 
+class LoopInDAGException : public std::exception {
+private:
+	std::string msg;
+
+public:
+	LoopInDAGException(std::string msg) : msg(msg) {}
+
+	virtual const char* what() const throw() {
+		return msg.c_str();
+	}
+};
+
 class Node {
 private:
 	std::string name;
 	std::list<Node*> sons;
 	int numParents;
+	bool beingDestructed;
 
 	int getNumParents() {
 		return numParents;
@@ -39,16 +53,18 @@ private:
 public:
 	Node() {}
 
-	Node(std::string name) : name(name), numParents(0) {}
+	Node(std::string name) : name(name), numParents(0), beingDestructed(false) {}
 
-	Node(std::string name, std::list<Node*> sons) : name(name), sons(sons), numParents(0) {}
+	Node(std::string name, std::list<Node*> sons) : name(name), sons(sons), numParents(0), beingDestructed(false) {}
 
 	~Node() {
+		beingDestructed = true;
+
 		if (!sons.empty()){
 			for (std::list<Node*>::iterator list_iter = sons.begin(); list_iter != sons.end(); list_iter++) {
 				if (((Node*)(*list_iter))->getNumParents() > 1)
 					((Node*)(*list_iter))->decreaseNumParents();
-				else
+				else if (!((Node*)(*list_iter))->beingDestructed)
 					delete ((Node*)(*list_iter));
 			}
 		}
@@ -84,7 +100,9 @@ public:
 		}
 	}
 
-	void descompose(std::list<tEdge> &edges){
+	void descompose(std::list<tEdge> &edges, std::unordered_set<std::string> &visited){
+		visited.insert(name);
+
 		if (sons.empty()) {
 			tEdge newEdge;
 			newEdge.parent = name;
@@ -100,11 +118,34 @@ public:
 
 				edges.push_back(newEdge);
 
-				if (!((Node*)(*list_iter))->getSons().empty()){
-					((Node*)(*list_iter))->descompose(edges);
-				}
+				if (visited.find(((Node*)*list_iter)->getName()) == visited.end())
+					if (!((Node*)(*list_iter))->getSons().empty())
+						((Node*)(*list_iter))->descompose(edges, visited);
 			}
 		}
+	}
+
+	//recibe el string del nombre del hijo buscado y un conjunto de los nodos visitados para evitar recorridos repetidos
+	bool hasSon(const std::string &sonName, std::unordered_set<std::string> &visited) {
+		visited.insert(name);
+
+		if (sons.empty())
+			return false;
+
+		std::list<Node*>::iterator list_iter = sons.begin();
+
+		bool found = false;
+
+		while (list_iter != sons.end() && !found) {
+			if (sonName == ((Node*)*list_iter)->getName())
+				found = true;
+			else if (visited.find(((Node*)*list_iter)->getName()) == visited.end())
+				found = ((Node*)*list_iter)->hasSon(sonName, visited);
+
+			list_iter++;
+		}
+		
+		return found;
 	}
 };
 
@@ -151,9 +192,28 @@ public:
 						std::unordered_map<std::string, Node*>::iterator end_iter = nodePointersHashSet.end();
 
 						if (parent_iter != end_iter && son_iter != end_iter) { //Los nodos estan en la ontologia pero no estan conectados
+							//comprobar si son_iter tiene como hijo en el arbol a parent_iter. si es asi, es un ciclo
+							std::unordered_set<std::string> visited;
+							if (((Node*)(son_iter->second))->hasSon(((Node*)(parent_iter->second))->getName(),visited)) {
+								//diferentes respuestas ante la deteccion del ciclo
+								//se puede devolver una ontologia a medias indicando que arista provoca el conflicto
+								//o se puede liberar la memoria de los nodos actuales y lanzar una excepcion
+								//La mas acertada es abortar la ejecucion pues si se deja seguir habria que decidir que hacer cuando:
+								//el nodo que hace el ciclo se convierte en padre de un nodo raiz -> cual es la nueva raiz?
+
+								//TO DO
+								//liberar el conjunto de nodos temporal
+								/*for (std::unordered_map<std::string, Node*>::iterator loopIter; loopIter != nodePointersHashSet.end(); loopIter++) {
+									delete (Node*)loopIter->second;
+								}*/
+
+								throw LoopInDAGException("There is a loop caused by (" + list_iter->parent + ", " + list_iter->son + ") edge");
+							}
+
 							//se le aniade como hijo el Node apuntado por son_iter al Node apuntado por parent_iter
 							((Node*)(*parent_iter).second)->addSon(((Node*)(*son_iter).second));
 
+							
 							if (possibleRootNodes.find(list_iter->son) != possibleRootNodes.end())
 								possibleRootNodes.erase(list_iter->son);
 						}
@@ -235,8 +295,9 @@ public:
 
 	void descompose(std::list<tEdge> &edges){
 		if (!rootsList.empty()){
+			std::unordered_set<std::string> visited;
 			for (std::list<Node*>::iterator list_iter = rootsList.begin(); list_iter != rootsList.end(); list_iter++) {
-				((Node*)(*list_iter))->descompose(edges);
+				((Node*)(*list_iter))->descompose(edges, visited);
 			}
 		}
 	}

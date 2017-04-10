@@ -1,11 +1,13 @@
 #include <iostream>
 #include "Ontology.h"
 #include <list>
+#include <unordered_set>
+#include <exception>
 
 void printEdgesList(std::list<tEdge> edges);
 
 int main(){
-	Node *arbol = new Node("padre");
+	/*Node *arbol = new Node("padre");
 	Node *hijo1 = new Node("hijo1");
 	Node *hijo2 = new Node("hijo2");
 	Node *hijo3 = new Node("hijo3");
@@ -52,6 +54,46 @@ int main(){
 	ontology->print();
 
 	delete ontology;
+
+	std::cout << std::endl << std::endl;
+
+	system("pause");
+
+	return 0;*/
+
+	Node *arbol1 = new Node("padre1");
+	Node *hijo1 = new Node("hijo1");
+	Node *hijo2 = new Node("hijo2");
+
+	arbol1->addSon(hijo1);
+	hijo1->addSon(hijo2);
+	hijo2->addSon(arbol1);
+
+	std::list<tEdge> edges1;
+	std::unordered_set<std::string> visited;
+	arbol1->descompose(edges1, visited);
+	
+
+	std::cout << std::endl << std::endl;
+
+	printEdgesList(edges1);
+
+	std::cout << std::endl << std::endl;
+
+	delete arbol1;
+
+	try {
+		Ontology* ontology = new Ontology(edges1);
+		
+		std::list<tEdge> edges2;
+		ontology->descompose(edges2);
+		printEdgesList(edges2);
+		
+		delete ontology;
+	}
+	catch (std::exception &e) {
+		std::cout << e.what() << std::endl;
+	}
 
 	std::cout << std::endl << std::endl;
 
