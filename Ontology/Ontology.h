@@ -23,7 +23,7 @@ private:
 	std::string msg;
 
 public:
-	LoopInDAGException(std::string msg) : msg(msg) {}
+	LoopInDAGException(const std::string &msg) : msg(msg) {}
 
 	virtual const char* what() const throw() {
 		return msg.c_str();
@@ -53,9 +53,9 @@ private:
 public:
 	Node() {}
 
-	Node(std::string name) : name(name), numParents(0), beingDestructed(false) {}
+	Node(const std::string &name) : name(name), numParents(0), beingDestructed(false) {}
 
-	Node(std::string name, std::list<Node*> sons) : name(name), sons(sons), numParents(0), beingDestructed(false) {}
+	Node(const std::string &name, const std::list<Node*> &sons) : name(name), sons(sons), numParents(0), beingDestructed(false) {}
 
 	~Node() {
 		beingDestructed = true;
@@ -80,16 +80,16 @@ public:
 		return sons;
 	}
 
-	void setName(std::string newName) {
+	void setName(const std::string &newName) {
 		name = newName;
 	}
 
-	void addSon(Node* newSon) {
+	void addSon(Node* &newSon) {
 		sons.push_back(newSon);
 		newSon->increaseNumParents();
 	}
 
-	void print(int tabs){
+	void print(const int &tabs){
 		for (int i = 0; i < tabs; i++)
 			std::cout << '\t';
 		std::cout << name << std::endl;
@@ -172,11 +172,7 @@ class Ontology {
 private:
 	std::list<Node*> rootsList;
 
-public:
-	Ontology(std::list<Node*> rootsList) : rootsList(rootsList) {}
-
-	//This constructor builds an Ontology using a list of edges (vertex pairs of a graph)
-	Ontology(std::list<tEdge> edges) {
+	void edgesListToOntology(std::list<tEdge> edges) {
 		if (!edges.empty()){
 			std::unordered_set<tEdge> checkedPairs; //unoreder_set (HashSet) with the edges that have been already inserted in the new Ontology.
 			std::unordered_map<std::string, Node*> nodePointersHashSet; //unordered_map (HashMap) with pointers to every Node of the new Ontology.
@@ -194,18 +190,17 @@ public:
 						if (parent_iter != end_iter && son_iter != end_iter) { //Los nodos estan en la ontologia pero no estan conectados
 							//comprobar si son_iter tiene como hijo en el arbol a parent_iter. si es asi, es un ciclo
 							std::unordered_set<std::string> visited;
-							if (((Node*)(son_iter->second))->hasSon(((Node*)(parent_iter->second))->getName(),visited)) {
+							if (((Node*)(son_iter->second))->hasSon(((Node*)(parent_iter->second))->getName(), visited)) {
 								//diferentes respuestas ante la deteccion del ciclo
 								//se puede devolver una ontologia a medias indicando que arista provoca el conflicto
 								//o se puede liberar la memoria de los nodos actuales y lanzar una excepcion
 								//La mas acertada es abortar la ejecucion pues si se deja seguir habria que decidir que hacer cuando:
 								//el nodo que hace el ciclo se convierte en padre de un nodo raiz -> cual es la nueva raiz?
 
-								//TO DO
 								//liberar el conjunto de nodos temporal
-								/*for (std::unordered_map<std::string, Node*>::iterator loopIter; loopIter != nodePointersHashSet.end(); loopIter++) {
-									delete (Node*)loopIter->second;
-								}*/
+								for (std::unordered_set<std::string>::iterator rootsIter = possibleRootNodes.begin(); rootsIter != possibleRootNodes.end(); rootsIter++) {
+									delete nodePointersHashSet.find(*rootsIter)->second;
+								}
 
 								throw LoopInDAGException("There is a loop caused by (" + list_iter->parent + ", " + list_iter->son + ") edge");
 							}
@@ -213,12 +208,12 @@ public:
 							//se le aniade como hijo el Node apuntado por son_iter al Node apuntado por parent_iter
 							((Node*)(*parent_iter).second)->addSon(((Node*)(*son_iter).second));
 
-							
+
 							if (possibleRootNodes.find(list_iter->son) != possibleRootNodes.end())
 								possibleRootNodes.erase(list_iter->son);
 						}
 						else if (parent_iter == end_iter && son_iter != end_iter) {
-							
+
 							//se crea un Node padre y se le aniade como hijo el Node al que apunta son_iter
 							Node* newParent = new Node(list_iter->parent);
 							newParent->addSon(((Node*)(*son_iter).second));
@@ -231,7 +226,7 @@ public:
 							if (possibleRootNodes.find(list_iter->son) != possibleRootNodes.end())
 								possibleRootNodes.erase(list_iter->son);
 
-							
+
 						}
 						else if (parent_iter != end_iter && son_iter == end_iter) {
 							//se crea un Node hijo y se le hace hijo del Node apuntado por parent_iter
@@ -273,6 +268,24 @@ public:
 				rootsList.push_back((Node*)(*nodePointersHashSet.find(root)).second);
 
 		}
+	}
+
+public:
+	Ontology(std::list<Node*> rootsList) : rootsList(rootsList) {}
+
+	//This constructor builds an Ontology using a list of edges (vertex pairs of a graph)
+	Ontology(const std::list<tEdge> &edges) {
+		edgesListToOntology(edges);
+	}
+
+	//This constructor builds an Ontology using two list of edges (vertex pairs of a graph)
+	Ontology(const std::list<tEdge> &edges1, const std::list<tEdge> &edges2) {
+		std::list<tEdge> edgesAux = edges1;
+
+		for (tEdge e : edges2)
+			edgesAux.push_back(e);
+
+		edgesListToOntology(edgesAux);
 	}
 
 	~Ontology() {
