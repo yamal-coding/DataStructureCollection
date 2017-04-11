@@ -314,6 +314,12 @@ public:
 			}
 		}
 	}
+
+	//This function must return a JSON or XML object serialized from an Ontology
+	void serialize() {
+		//1. Descompose
+		//2. Write down the edges list
+	}
 };
 
 #endif
